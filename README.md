@@ -38,6 +38,8 @@ Clone the repository:
 
 ```bash
 git clone https://github.com/AchimPieters/esp32-homekit-qrcode.git
+```
+```bash
 cd esp32-homekit-qrcode
 ```
 
