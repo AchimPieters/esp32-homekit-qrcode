@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import PIL.Image
+import PIL.ImageDraw
+import PIL.ImageFont
+import qrcode
+import re
+import sys
+import random
+import string
+
+script_dir = os.path.dirname(os.path.realpath(__file__))
+BASE36 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+CATEGORY_REFERENCE = {
+    1: "Other", 2: "Bridge", 3: "Fan", 4: "Garage Door Opener", 5: "Light",
+    6: "Lock", 7: "Outlet", 8: "Switch", 9: "Thermostat", 10: "Sensor",
+    11: "Security system", 12: "Door", 13: "Window", 14: "Window covering",
+    15: "Programmable switch", 16: "Range extender", 17: "IP camera",
+    18: "Video doorbell", 19: "Air purifier", 20: "Heater", 21: "Air conditioner",
+    22: "Humidifier", 23: "Dehumidifier", 24: "Apple TV", 26: "Speaker",
+    27: "Airport", 28: "Sprinkler", 29: "Faucet", 30: "Shower head",
+    31: "Television", 32: "Target remote"
+}
+
+def gen_homekit_setup_uri(category, password, setup_id, version=0, reserved=0, flags=2):
+    payload = 0
+    payload |= (version & 0x7)
+    payload <<= 4
+    payload |= (reserved & 0xf)
+    payload <<= 8
+    payload |= (category & 0xff)
+    payload <<= 4
+    payload |= (flags & 0xf)
+    payload <<= 27
+    payload |= (int(password.replace('-', '')) & 0x7fffffff)
+    encodedPayload = ''
+    for _ in range(9):
+        encodedPayload += BASE36[payload % 36]
+        payload //= 36
+    return 'X-HM://%s%s' % (''.join(reversed(encodedPayload)), setup_id)
+
+def generate_device_code(category_id):
+    return (
+        ''.join(random.choices(string.ascii_uppercase, k=2)) +
+        str(category_id) +
+        random.choice(string.ascii_uppercase) +
+        str(random.randint(0, 9)) +
+        ''.join(random.choices(string.ascii_uppercase, k=2)) +
+        '/' +
+        random.choice(string.ascii_uppercase)
+    )
+
+def generate_serial_number():
+    pattern = [
+        random.choice(string.ascii_uppercase), str(random.randint(0, 9)),
+        random.choice(string.ascii_uppercase), random.choice(string.ascii_uppercase),
+        random.choice(string.ascii_uppercase), str(random.randint(0, 9)),
+        random.choice(string.ascii_uppercase), str(random.randint(0, 9)),
+        str(random.randint(0, 9)), str(random.randint(0, 9)),
+        random.choice(string.ascii_uppercase), random.choice(string.ascii_uppercase),
+    ]
+    return ''.join(pattern)
+
+def generate_csn():
+    numbers = ''.join(str(random.randint(0, 9)) for _ in range(20))
+    letters1 = ''.join(random.choices(string.ascii_uppercase, k=3))
+    numbers2 = ''.join(str(random.randint(0, 9)) for _ in range(4))
+    letter = random.choice(string.ascii_uppercase)
+    number = str(random.randint(0, 9))
+    letter2 = random.choice(string.ascii_uppercase)
+    final = ''.join(str(random.randint(0, 9)) for _ in range(3))
+    return f"{numbers}{letters1}{numbers2}{letter}{number}{letter2}{final}"
+
+def scale_coords(x, y, scale):
+    return int(x * scale), int(y * scale)
+
+def draw_scaled_text(draw, text, font, pos, scale, fill=(0, 0, 0)):
+    x, y = scale_coords(*pos, scale)
+    draw.text((x, y), text, font=font, fill=fill)
+
+def gen_homekit_qrcode(setup_uri, password, category_id, mac_address=None):
+    template_path = os.path.join(script_dir, 'qrcode_ext.png')
+    template = PIL.Image.open(template_path).convert("RGBA")
+    scale = template.width / 842
+
+    img = PIL.Image.new('RGBA', template.size, (255, 255, 255, 0))
+    img.paste(template, (0, 0), template)
+    draw = PIL.ImageDraw.Draw(img)
+
+    text_font = PIL.ImageFont.truetype(os.path.join(script_dir, 'SF-Pro-Text-Regular.otf'), int(18 * scale))
+    barcode_font = PIL.ImageFont.truetype(os.path.join(script_dir, 'barcode39.ttf'), int(36 * scale))
+    superscript_font = PIL.ImageFont.truetype(os.path.join(script_dir, 'SF-Pro-Text-Regular.otf'), int(8 * scale))
+    code_font = PIL.ImageFont.truetype(os.path.join(script_dir, 'SF-Pro-Text-Regular.otf'), int(28 * scale))
+
+    device_code = generate_device_code(category_id)
+    serial = generate_serial_number()
+    csn = generate_csn()
+
+    y = 6
+    x = 200
+    spacing_top = 20
+    spacing_body = 18
+    spacing_extra = 6
+    barcode_spacing = 30
+
+    category_name = CATEGORY_REFERENCE.get(category_id, "Unknown")
+    draw_scaled_text(draw, f"HomeKit {category_name} | {device_code} | WIFI", text_font, (x, y), scale)
+    y += spacing_top
+    brand = "Designed by StudioPieters"
+    draw_scaled_text(draw, brand, text_font, (x, y), scale)
+    brand_width = text_font.getlength(brand)
+    sup_r_x = int(x * scale + brand_width)
+    sup_r_y = int(y * scale + 3 * scale)
+    draw.text((sup_r_x, sup_r_y), "®", font=superscript_font, fill=(0, 0, 0))
+    y += spacing_top
+    draw_scaled_text(draw, "Assembled in the Netherlands", text_font, (x, y), scale)
+    y += spacing_top
+
+    draw_scaled_text(draw, f"(1P){device_code}", text_font, (x, y), scale)
+    if mac_address:
+        formatted_mac = ":".join(mac_address[i:i+2] for i in range(0, 12, 2)).upper()
+        draw_scaled_text(draw, f"MAC: {formatted_mac}", text_font, (560, y), scale)
+        draw_scaled_text(draw, f"*{mac_address.upper()}*", barcode_font, (560, y + spacing_body + spacing_extra), scale)
+
+    y += spacing_body + spacing_extra
+    draw_scaled_text(draw, f"*{device_code}*", barcode_font, (x, y), scale)
+    y += barcode_spacing
+    draw_scaled_text(draw, f"(S) Serial No. {serial}", text_font, (x, y), scale)
+    y += spacing_body + spacing_extra
+    draw_scaled_text(draw, f"*{serial}*", barcode_font, (x, y), scale)
+    y += barcode_spacing
+    draw_scaled_text(draw, f"CSN {csn}", text_font, (x, y), scale)
+    y += spacing_body + spacing_extra
+    draw_scaled_text(draw, f"*{csn}*", barcode_font, (x, y), scale)
+
+    qr_code = qrcode.QRCode(version=2, border=0, box_size=int(3 * scale), error_correction=qrcode.constants.ERROR_CORRECT_Q)
+    qr_code.add_data(setup_uri)
+    qr_img = qr_code.make_image(fill_color='black', back_color='white').convert('RGBA')
+    datas = qr_img.getdata()
+    newData = []
+    for item in datas:
+        if item[0] > 200 and item[1] > 200 and item[2] > 200:
+            newData.append((255, 255, 255, 0))
+        else:
+            newData.append(item)
+    qr_img.putdata(newData)
+    qr_img = qr_img.resize((int(136 * scale), int(136 * scale)))
+    img.paste(qr_img, scale_coords(19, 77, scale), qr_img)
+
+    code = password.replace('-', '')
+    for i in range(4):
+        draw.text(scale_coords(76 + i * 20, 12, scale), code[i], font=code_font, fill=(0, 0, 0))
+        draw.text(scale_coords(76 + i * 20, 39, scale), code[i + 4], font=code_font, fill=(0, 0, 0))
+
+    return img
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('category', type=int)
+    parser.add_argument('password')
+    parser.add_argument('setup_id')
+    parser.add_argument('mac_address')
+    parser.add_argument('output_image')
+    args = parser.parse_args()
+
+    if not re.match(r'\d{3}-\d{2}-\d{3}', args.password):
+        raise ValueError('Invalid password format')
+    if not re.match(r'[0-9A-Z]{4}', args.setup_id):
+        raise ValueError('Invalid setup ID')
+    if not re.match(r'^[0-9a-fA-F]{12}$', args.mac_address):
+        raise ValueError('Invalid MAC address')
+
+    output_dir = os.path.dirname(args.output_image)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    uri = gen_homekit_setup_uri(args.category, args.password, args.setup_id)
+    img = gen_homekit_qrcode(uri, args.password, category_id=args.category, mac_address=args.mac_address)
+    img.save(args.output_image, dpi=(300, 300))
+    print(f"\n✅ QR-code opgeslagen als: {args.output_image}")
+
+if __name__ == '__main__':
+    main()
