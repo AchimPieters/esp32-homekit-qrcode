@@ -12,7 +12,7 @@ This Python tool automatically creates a print-ready label including:
 
 Perfect for professionally labeling your DIY HomeKit projects.
 
-![label example](images/Example.png)
+![label example](images/example.png)
 
 ---
 
