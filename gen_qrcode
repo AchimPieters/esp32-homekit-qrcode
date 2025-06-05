@@ -34,7 +34,7 @@ def gen_homekit_setup_uri(category, password, setup_id, version=0, reserved=0, f
     payload <<= 4
     payload |= (flags & 0xf)
     payload <<= 27
-    payload |= (int(password.replace('-', '')) & 0x7fffffff)
+    payload |= (int(password.replace('-', '')) & 0x7ffffff)
     encodedPayload = ''
     for _ in range(9):
         encodedPayload += BASE36[payload % 36]
@@ -110,7 +110,11 @@ def gen_homekit_qrcode(setup_uri, password, category_id, mac_address=None):
     y += spacing_top
     brand = "Designed by StudioPieters"
     draw_scaled_text(draw, brand, text_font, (x, y), scale)
-    brand_width = text_font.getlength(brand)
+    brand_width = (
+        text_font.getlength(brand)
+        if hasattr(text_font, "getlength")
+        else text_font.getsize(brand)[0]
+    )
     sup_r_x = int(x * scale + brand_width)
     sup_r_y = int(y * scale + 3 * scale)
     draw.text((sup_r_x, sup_r_y), "®", font=superscript_font, fill=(0, 0, 0))
