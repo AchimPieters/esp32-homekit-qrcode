@@ -98,4 +98,4 @@ Use together with your own HomeKit firmware:
 
 ## macOS Application
 
-A simple SwiftUI interface is included under `MacApp/` to run the generator on macOS. Open the folder in Xcode and build **HomeKitQRCodeApp**. The app provides fields for all generator parameters, displays the rendered label and allows saving the PNG file.
+A SwiftUI application lives in the `MacApp/` directory. Open `MacApp/Package.swift` in Xcode to build **HomeKitQRCodeApp**. The package bundles the Python generator and required fonts, provides fields for all generator parameters, displays the rendered label and allows saving the PNG file.
