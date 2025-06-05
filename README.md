@@ -95,3 +95,7 @@ Use together with your own HomeKit firmware:
 - [Pillow](https://python-pillow.org/)
 - [qrcode](https://github.com/lincolnloop/python-qrcode)
 
+
+## macOS Application
+
+A simple SwiftUI interface is included under `MacApp/` to run the generator on macOS. Open the folder in Xcode and build **HomeKitQRCodeApp**. The app provides fields for all generator parameters, displays the rendered label and allows saving the PNG file.
